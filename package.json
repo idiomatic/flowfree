@@ -1,5 +1,5 @@
 {
-    "name": "freeflow",
+    "name": "flowfree",
     "version": "0.0.0",
     "description": "Free Flow puzzle solver",
     "contributors": [
@@ -10,15 +10,15 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/idiomatic/freeflow.git"
+        "url": "https://github.com/idiomatic/flowfree.git"
     },
-    "bugs": "https://github.com/idiomatic/freeflow/issues",
-    "main": "freeflow.iced",
+    "bugs": "https://github.com/idiomatic/flowfree/issues",
+    "main": "flowfree.iced",
     "scripts": {
-        "start": "node_modules/.bin/iced freeflow.iced"
+        "start": "node_modules/.bin/iced flowfree.iced"
     },
     "bin": {
-        "freeflow": "freeflow.iced"
+        "flowfree": "flowfree.iced"
     },
     "config": {
     },
