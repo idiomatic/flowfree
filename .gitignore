@@ -7,9 +7,14 @@ lib-cov
 *.pid
 *.gz
 
+*~
+,junk*
+
 pids
 logs
 results
 
 npm-debug.log
 node_modules
+
+level*txt
