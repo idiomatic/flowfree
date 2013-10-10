@@ -212,7 +212,13 @@ class Puzzle
         @message = undefined
         @solutions = []
         @strategies = [@mandatory, @guess]
+        @id = "#{@size}x#{@size} #{@endpoints[2..]}"
+        @start = undefined
+        @elapsed = undefined
+        @best_time = undefined
+        @guess_branches = [0, 0, 0, 0, 0]
     solve: (autocb) ->
+        @start = new Date
         loop
             ++@steps
             for strategy in @strategies
@@ -224,11 +230,12 @@ class Puzzle
                     @solutions.push @tiles.clone()
                     break
             @tiles = @tiles_stack.pop()
-            return unless @tiles
+            break unless @tiles
             # lastly...
             unless @steps % 1000
                 await setImmediate defer()
             #await setTimeout defer(), 1000 / Math.sqrt @steps
+        @elapsed = new Date - @start
     mandatory: =>
         found = true
         while found
@@ -256,11 +263,14 @@ class Puzzle
         if unfinished
             line = @tiles.grid[unfinished]
             ++@tiles.guess_depth
+            branches = 0
             for neighbor in @tiles.neighbors unfinished, BLANK
                 continue if @tiles.perimiterSegmentMaxLength(neighbor, line) >= 3
                 hypothesis = @tiles.clone()
                 hypothesis.set neighbor, line
                 @tiles_stack.push hypothesis
+                ++branches
+            ++@guess_branches[branches]
         # this tile is superceded by those just pushed
         return false
 
@@ -280,9 +290,8 @@ class ANSITermRender extends stream.Transform
         if typeof(data) is 'object'
             ++@puzzles
             @puzzle = data
-            @start = new Date()
         else
-            @log.push [new Date() - @start, @status()]
+            @log.push [@puzzle.elapsed, @status()]
             @log.sort (a, b) -> b[0] - a[0]
         unless @puzzle.tiles or @puzzle.solutions[0]
             return
@@ -312,13 +321,16 @@ class ANSITermRender extends stream.Transform
         return null
     status: =>
         tiles = @puzzle.tiles or @puzzle.solutions[0]
-        return "puzzle #{@puzzles} step #{@puzzle.steps} stack #{@puzzle.tiles_stack.length} guess_depth #{tiles.guess_depth} solutions #{@puzzle.solutions.length} elapsed #{new Date() - @start}ms\n"
+        elapsed = @puzzle.elapsed or (new Date - @puzzle.start) or 0
+        if @puzzle.best_time > 0
+            progress = "#{Math.round elapsed / @puzzle.best_time * 100}%"
+        else
+            progress = ""
+        #return "puzzle #{@puzzles} step #{@puzzle.steps} stack #{@puzzle.tiles_stack.length} guess_depth #{tiles.guess_depth} solutions #{@puzzle.solutions.length} elapsed #{elapsed}ms #{progress}\n"
+        return "##{@puzzles} step #{@puzzle.steps} elapsed #{elapsed}ms #{progress} #{@puzzle.guess_branches}\n"
     initDisplay: ->
         @push ansiterm.position()
         @push ansiterm.eraseDisplay()
-        for line in [1..@puzzle.height]
-            @push ansiterm.position line
-        @push "\n"
     render: =>
         @raster()
         @push ansiterm.color()
@@ -393,12 +405,19 @@ parsePuzzle = (line) ->
 render = new ANSITermRender
 render.pipe process.stdout
 
+try
+    timings = JSON.parse fs.readFileSync 'flowfree_timings.json'
+catch
+    timings = {}
+
 await
     puzzle_queue = []
     rl = readline.createInterface input:process.stdin, terminal:false
     rl.on 'line', (line) ->
         if line
-            puzzle_queue.push parsePuzzle line
+            puzzle = parsePuzzle line
+            puzzle.best_time = timings[puzzle.id]
+            puzzle_queue.push puzzle
     rl.on 'close', ->
         puzzle_queue.push null
     do (autocb=defer()) ->
@@ -414,6 +433,7 @@ await
                     rl.pause()
                     render.write p
                     await p.solve defer()
+                    timings[p.id] = Math.min p.elapsed, (timings[p.id] ? p.elapsed)
                     render.write true
                     if p.solutions.length is 0
                         throw new Error 'no solution'
@@ -423,3 +443,5 @@ await
                     await setTimeout defer(), 100
 
 render.end()
+
+fs.writeFileSync 'flowfree_timings.json', JSON.stringify timings
