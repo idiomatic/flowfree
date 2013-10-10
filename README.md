@@ -14,8 +14,12 @@ Getting the Puzzles
 
 2. extract puzzles
 
-        unzip -e ~/Music/iTunes/iTunes\ Media/Mobile\ Applications/Flow\ Free\ 1.7.ipa Payload/Flow.app/level*.txt
+        unzip -e ~/Music/iTunes/iTunes\ Media/Mobile\ Applications/Flow\ Free\ 1.7.ipa Payload/Flow.app/levelpack\*.txt
 
 ### Google Ecosystem
 
-tbd
+1. download the .apk file
+
+2. extract puzzles
+
+        unzip -e Flow\ Free\ v2.4.apk assets/levelpack\*.txt
