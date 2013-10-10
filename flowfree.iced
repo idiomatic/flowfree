@@ -1,305 +1,216 @@
 #!/usr/bin/env iced
 fs = require 'fs'
 readline = require 'readline'
-stream = require 'stream'
 ansiterm = require './ansiterm'
 
-Array::remove = (v) ->
-    beyond = 0
-    while (i = @indexOf v, beyond) >= 0
+debug = false
+scroll = debug
+display_frequency = 20
+display_showoff = 1
+
+# TODO merge segment_ends and endpoints
+# TODO grid for endpoints
+# TODO patterns
+# TODO list of patterns affected by this tile?
+# TODO disallow BLANK dead ends
+
+Array::removeFirst = (v) ->
+    i = @indexOf v
+    if i >= 0
         @splice i, 1
-        beyond = i
-    return @
-
-Array::pushIfAbsent = (values...) ->
-    for v in values
-        unless v in @
-            @push v
-
-String::repeat = (n) ->
-    return new Array(++n).join @
-
-log10 = (v) ->
-    return Math.log(v) / Math.log(10)
 
 WALL = -1
 BLANK = 0
 # RED = 1
 # ...
 
-COLUMN_WIDTH = 4
+matchFactory = (width) ->
+    N = -width
+    E = 1
+    S = width
+    W = -1
+    NW = N + W
+    NE = N + E
+    SE = S + E
+    SW = S + W
+    NN = N + N
+    EE = E + E
+    SS = S + S
+    WW = W + W
+    NNN = NN + N
+    EEE = EE + E
+    SSS = SS + S
+    WWW = WW + W
+    NNW = NN + W
+    NNE = NN + E
+    NEE = N + EE
+    SEE = S + EE
+    SSE = SS + E
+    SSW = SS + W
+    SWW = S + WW
+    NWW = N + WW
+    patterns = [
+        # unacceptable clumping
+        {me:[N, NE, E], fail:true}
+        {me:[NE, E, SE], fail:true}
+        {me:[E, SE, S], fail:true}
+        {me:[SE, S, SW], fail:true}
+        {me:[S, SW, W], fail:true}
+        {me:[SW, W, NW], fail:true}
+        {me:[W, NW, N], fail:true}
+        {me:[NW, N, NE], fail:true}
+        # no exit
+        {notvacant:[N, E, S, W], fail:true}
+        # vacant dead ends
+        {vacant:[NW], midsegment:[NWW, NNW, N], fail:true}
+        {vacant:[NW], midsegment:[NWW, NNW, W], fail:true}
+        {vacant:[NE], midsegment:[NEE, NNE, N], fail:true}
+        {vacant:[NE], midsegment:[NEE, NNE, E], fail:true}
+        {vacant:[SE], midsegment:[SEE, SSE, S], fail:true}
+        {vacant:[SE], midsegment:[SEE, SSE, E], fail:true}
+        {vacant:[SW], midsegment:[SWW, SSW, S], fail:true}
+        {vacant:[SW], midsegment:[SWW, SSW, W], fail:true}
+        # involuntary exit
+        {vacant:[N], notvacant:[E, S, W]}
+        {vacant:[N], notvacant:[E, S, W]}
+        {vacant:[E], notvacant:[S, W, N]}
+        {vacant:[E], notvacant:[S, W, N]}
+        {vacant:[S], notvacant:[N, E, W]}
+        {vacant:[S], notvacant:[N, E, W]}
+        {vacant:[W], notvacant:[N, E, S]}
+        {vacant:[W], notvacant:[N, E, S]}
+        # only line capable of feeding this part of a dead-end
+        {vacant:[N, NN], midsegment:[NE, NW], notme:[NE, NW]}
+        {vacant:[E, EE], midsegment:[NE, SE], notme:[NE, SE]}
+        {vacant:[S, SS], midsegment:[SE, SW], notme:[SE, SW]}
+        {vacant:[W, WW], midsegment:[NW, SW], notme:[NW, SW]}
+        # only line able to turn a nearby corner
+        {vacant:[N, NW], midsegment:[NE, NN], notme:[W, NE, NN]}
+        {vacant:[N, NE], midsegment:[NW, NN], notme:[E, NW, NN]}
+        {vacant:[E, NE], midsegment:[SE, EE], notme:[N, SE, EE]}
+        {vacant:[E, SE], midsegment:[NE, EE], notme:[S, NE, EE]}
+        {vacant:[S, SE], midsegment:[SW, SS], notme:[E, SW, SS]}
+        {vacant:[S, SW], midsegment:[SE, SS], notme:[W, SE, SS]}
+        {vacant:[W, SW], midsegment:[NW, WW], notme:[S, NW, WW]}
+        {vacant:[W, NW], midsegment:[SW, WW], notme:[N, SW, WW]}
+        # only line able to turn a slightly further corner
+        {vacant:[N, NN, NNW], midsegment:[NE, NNE, NNN], notme:[NW, NE, NNE, NNN]}
+        {vacant:[N, NN, NNE], midsegment:[NW, NNW, NNN], notme:[NE, NW, NNW, NNN]}
+        {vacant:[E, EE, NEE], midsegment:[SE, SEE, EEE], notme:[NE, SE, SEE, EEE]}
+        {vacant:[E, EE, SEE], midsegment:[NE, NEE, EEE], notme:[SE, NE, NEE, EEE]}
+        {vacant:[S, SS, SSE], midsegment:[SW, SSW, SSS], notme:[SE, SW, SSW, SSS]}
+        {vacant:[S, SS, SSW], midsegment:[SE, SSE, SSS], notme:[SW, SE, SSE, SSS]}
+        {vacant:[W, WW, SWW], midsegment:[NW, NWW, WWW], notme:[SW, NW, NWW, WWW]}
+        {vacant:[W, WW, NWW], midsegment:[SW, SWW, WWW], notme:[NW, SW, SWW, WWW]}
+        # bent
+        {vacant:[N], midsegment:[W], me:[S, SE]}
+        {vacant:[N], midsegment:[E], me:[S, SW]}
+        {vacant:[E], midsegment:[S], me:[W, NW]}
+        {vacant:[E], midsegment:[N], me:[W, SW]}
+        {vacant:[S], midsegment:[E], me:[N, NW]}
+        {vacant:[S], midsegment:[W], me:[N, NE]}
+        {vacant:[W], midsegment:[N], me:[E, SE]}
+        {vacant:[W], midsegment:[S], me:[E, NE]}
+        # guesses
+        {vacant:[N, E], notvacant:[S, W], go:[[N], [E]]}
+        {vacant:[N, S], notvacant:[E, W], go:[[N], [S]]}
+        {vacant:[N, W], notvacant:[S, E], go:[[N], [W]]}
+        {vacant:[S, E], notvacant:[N, W], go:[[S], [E]]}
+        {vacant:[S, W], notvacant:[N, E], go:[[S], [W]]}
+        {vacant:[E, W], notvacant:[N, S], go:[[E], [W]]}
+        {vacant:[N, E, S], notvacant:[W], go:[[N], [E], [S]]}
+        {vacant:[E, S, W], notvacant:[N], go:[[E], [S], [W]]}
+        {vacant:[S, W, N], notvacant:[E], go:[[S], [W], [N]]}
+        {vacant:[W, N, E], notvacant:[S], go:[[W], [N], [E]]}
+        {vacant:[N, E, S, W], go:[[N], [E], [S], [W]]}
+    ]
+    compile = (pattern) ->
+        source = []
+        if pattern.me?.length > 0 or pattern.notme?.length > 0
+            source.push "var line = this.line_grid[tile];"
+        for offset in pattern.me or []
+                source.push "if (this.line_grid[tile + #{offset}] !== line) return;"
+        for offset in pattern.notme or []
+                source.push "if (this.line_grid[tile + #{offset}] === line) return;"
+        for offset in pattern.vacant or []
+            source.push "if (this.line_grid[tile + #{offset}] !== #{BLANK}) return;"
+        for offset in pattern.notvacant or []
+            source.push "if (this.line_grid[tile + #{offset}] === #{BLANK}) return;"
+        for offset in pattern.midsegment or []
+            # XXX segment_end_grid
+            source.push "if (this.line_grid[tile + #{offset}] === #{BLANK}) return;"
+            source.push "if (this.segment_ends.indexOf(tile + #{offset}) !== -1) return;"
+        if pattern.fail
+            source.push "return [];"
+        else
+            source.push "return #{JSON.stringify pattern.go or [pattern.vacant]};"
+        return new Function 'tile', source.join ' '
+    patterns = (compile(pattern) for pattern in patterns)
+    return (tile) ->
+        for pattern in patterns
+            go = pattern.call @, tile
+            return go if go
 
 class Tiles
-    # XXX bridges: makes @neighbor_offsets fail, warranting precalculation
-    constructor: (parent, @segment_ends=[], @grid=undefined, @blank=0) ->
-        {@height, @width, @endpoints, @bridges, @neighbor_offsets, @corner_offsets, @perimiter_offsets, @guess_depth} = parent
-        N = -@width
-        S = @width
-        W = -1
-        E = 1
-        @neighbor_offsets or= [N, E, S, W]
-        @perimiter_offsets or= [N+W, N, N+E, E, S+E, S, S+W, W]
-        @corner_offsets or= [
-            # nonend nonblank notme -> vacants/assigned
-            [[N+E, N+N], [N, N+W]]
-            [[N+W, N+N], [N, N+E]]
-            [[S+E, E+E], [E, E+N]]
-            [[N+E, E+E], [E, E+S]]
-            [[S+W, S+S], [S, S+E]]
-            [[S+E, S+S], [S, S+W]]
-            [[N+W, W+W], [W, W+S]]
-            [[S+W, W+W], [W, W+N]]
-            [[N+E, N+W], [N, N+N]]
-            [[E+N, E+S], [E, E+E]]
-            [[S+E, S+W], [S, S+S]]
-            [[W+S, W+N], [W, W+W]]
-            [[N+E, N+N+E, N+N+N], [N, N+N, N+N+W]]
-            [[N+W, N+N+W, N+N+N], [N, N+N, N+N+E]]
-            [[S+E, S+E+E, E+E+E], [E, E+E, E+E+N]]
-            [[N+E, N+E+E, E+E+E], [E, E+E, E+E+S]]
-            [[S+W, S+S+W, S+S+S], [S, S+S, S+S+E]]
-            [[S+E, S+S+E, S+S+S], [S, S+S, S+S+W]]
-            [[N+W, N+W+W, W+W+W], [W, W+W, W+W+S]]
-            [[S+W, S+W+W, W+W+W], [W, W+W, W+W+N]]
-        ]
-        # XXX more generalized patterns: likeme, notlikeme, endpoint, notendpoint, vacant, notvacant, becomesme
-        @initGrid() unless @grid?
-    clone: ->
-        return new Tiles @, @segment_ends.slice(0), @grid.slice(0), @blank
-    initGrid: ->
-        @grid = new Array @width * @height
-        for _, tile in @grid
-            # removes endpoints
-            #@set tile, BLANK
-            @grid[tile] = BLANK
-            ++@blank
-        for tile in [0...@width]
-            @set tile, WALL
-            @set tile + @width * (@height - 1), WALL
-        for row in [1...@height - 1]
-            @set row * @width, WALL
-            @set (row + 1) * @width - 1, WALL
-        for [start, end], line in @endpoints
-            if start?
-                # adds to segment_ends
-                @set start, line
-                @set end, line
-    isFull: ->
-        return @blank is 0
-    isEndpoint: (tile) ->
-        line = @grid[tile]
-        return line? and line isnt WALL and tile in @endpoints[line]
-    isSegmentEnd: (tile) ->
-        return tile in @segment_ends
-    isDeadEnd: (tile) ->
-        return false if @grid[tile] is BLANK
-        line = @grid[tile]
-        blank = @neighborsLength tile, BLANK
-        like = @neighborsLength tile, line
-        return (blank is 0) and (like < 2)
-    neighborsLength: (tile, line) ->
-        n = 0
-        for offset in @neighbor_offsets
-            ++n if @grid[tile + offset] is line
-        return n
-    neighbors: (tile, line) ->
-        #return (tile + relative for relative in @neighbor_offsets when @grid[tile + relative] is line)
-        # new Array is 4x faster
-        a = new Array @neighborsLength tile, line
-        i = 0
-        for offset in @neighbor_offsets
-            if @grid[tile + offset] is line
-                a[i++] = tile + offset
-        return a
-    neighborSegmentEndLength: (tile) ->
-        n = 0
-        for offset in @neighbor_offsets
-            ++n if @isSegmentEnd tile + offset
-        return n
-    rigidNeighborCorners: (tile) ->
-        a = []
-        line = @grid[tile]
-        for corner in @corner_offsets
-            failed = false
-            for offset in corner[1]
-                failed = @grid[tile + offset] isnt BLANK
-                break if failed
-            continue if failed
-            for offset in corner[0]
-                # has to be occupied by a different non-continuable line
-                failed = @grid[tile + offset] is BLANK
-                failed or= @grid[tile + offset] is line
-                break if failed
-            continue if failed
-            for offset in corner[0]
-                failed or= @isEndpoint tile + offset
-                failed or= @isSegmentEnd tile + offset
-                break if failed
-            continue if failed
-            for offset in corner[1]
-                a.push tile + offset
-            break if @isEndpoint tile
-        return a
-        for offset in @neighbor_offsets
-            neighbor = tile + offset
-            continue if @grid[neighbor] isnt BLANK
-            continue if @neighborsLength(neighbor, BLANK) isnt 1
-            continue if @neighborSegmentEndLength(neighbor) isnt 1
-            a.push neighbor
-        return a
-    perimiterLength: (tile, line) ->
-        n = 0
-        for offset in @perimiter_offsets
-            ++n if @grid[tile + offset] is line
-        return n
-    perimiterSegmentMaxLength: (tile, line) ->
-        max = 0
-        n = 0
-        i = 0
-        for offset in @perimiter_offsets
-            if @grid[tile + offset] is line
-                ++n
-                max = n if n > max
-            else
-                n = 0
-        if n
-            # second attempt if segment crosses perimiter_offsets bounds
-            for offset in @perimiter_offsets
-                if @grid[tile + offset] is line
-                    ++n
-                    max = n if n > max
-                else
-                    break
-        return max
+    constructor: (parent) ->
+        #{@width, @height, @endpoint_grid, @match} = parent
+        {@width, @height, @blanks, @match} = parent
+        @line_grid = parent.line_grid.slice 0
+        @segment_ends = parent.segment_ends.slice 0
+        #@segment_end_grid = parent.segment_end_grid.slice 0
     set: (tile, line) ->
-        return if @grid[tile] is line
-        if @grid[tile] is BLANK
-            --@blank
-        if line is BLANK
-            ++@blank
-        @grid[tile] = line
-        switch line
-            when WALL
-                true
-            when BLANK
-                ++@blank
-                @segment_ends.remove tile
-        adjustSegment = (tile) =>
-            n = @neighborsLength(tile, line)
-            ++n if @isEndpoint tile
-            if n > 1
-                @segment_ends.remove tile
-            else
-                @segment_ends.pushIfAbsent tile
-        for neighbor in @neighbors tile, line
-            adjustSegment neighbor
-        adjustSegment tile
-    clear: (tile) ->
-        @set tile, BLANK
-    hasDeadEnds: ->
-        for tile in @segment_ends
-            return true if tile? and @isDeadEnd tile
-        for line, tile in @grid
-            continue if line isnt BLANK
-            continue if @neighborsLength(tile, BLANK) > 1
-            continue if @neighborSegmentEndLength(tile) > 0
-            return true
-        return false
+        #assert line isnt BLANK
+        #assert line isnt WALL
+        #assert @line_grid[tile] is BLANK
+        --@blanks
+        @line_grid[tile] = line
+        # collapse adjacent segment ends
+        neighbor_segment_ends = 0
+        for offset in [-@width, @width, 1, -1]
+            if @line_grid[tile + offset] is line
+                if tile + offset in @segment_ends
+                    ++neighbor_segment_ends
+                    @segment_ends.removeFirst tile + offset
+        unless neighbor_segment_ends is 2
+            @segment_ends.push tile
+
+puzzle_id = 0
 
 class Puzzle
     constructor: (@size, @endpoints) ->
-        @height = @width = @size + 2
-        @guess_depth = 0
+        #[red1, red2, green1, green2, ...]
+        @n = ++puzzle_id
+        @id = "#{@size}x#{@size} #{@endpoints}"
+        @width = @height = @size + 2
+        @segment_ends = []
+        @blanks = 0
+        @line_grid = new Array @width * @height
+        for tile in [0...@height * @width]
+            @line_grid[tile] = BLANK
+        for col in [0...@width]
+            @line_grid[col] = @line_grid[col + (@height - 1) * @width] = WALL
+        for row in [0...@height]
+            @line_grid[row * @width] = @line_grid[(row + 1) * @width - 1] = WALL
+        for endpoint, i in @endpoints
+            line = 1 + Math.floor i / 2
+            @line_grid[endpoint] = line
+            if i % 2 is 1
+                better_half = @endpoints[i - 1]
+                adjacent = (Math.abs better_half - endpoint is 1) or (Math.abs better_half - endpoint is @width)
+                continue if adjacent
+            @segment_ends.push endpoint
+        @blanks = @size * @size - @endpoints.length
+        #@endpoint_grid = new Array @width * @height
+        #@segment_end_grid = new Array @width * @height
         @tiles = new Tiles @
-        @tiles_stack = []
-        @steps = 0
-        @message = undefined
+        @stack = []
+        @match = matchFactory @width
+        @step = 0
+        @start = null
+        @elapsed = null
         @solutions = []
-        @strategies = [@mandatory, @guess]
-        @id = "#{@size}x#{@size} #{@endpoints[2..]}"
-        @start = undefined
-        @elapsed = undefined
-        @best_time = undefined
-        @guess_branches = [0, 0, 0, 0, 0]
-    solve: (autocb) ->
-        @start = new Date
-        loop
-            ++@steps
-            for strategy in @strategies
-                unless strategy()
-                    break
-                if @tiles.hasDeadEnds()
-                    break
-                if @tiles.isFull() and @tiles.segment_ends.length is 0
-                    @solutions.push @tiles.clone()
-                    break
-            @tiles = @tiles_stack.pop()
-            break unless @tiles
-            # lastly...
-            unless @steps % 1000
-                await setImmediate defer()
-            #await setTimeout defer(), 1000 / Math.sqrt @steps
-        @elapsed = new Date - @start
-    mandatory: =>
-        found = true
-        while found
-            found = false
-            for tile in @tiles.segment_ends
-                line = @tiles.grid[tile]
-                if @tiles.neighborsLength(tile, BLANK) is 1
-                    # this line has no choice
-                    [vacant] = @tiles.neighbors tile, BLANK
-                    # avoid over congestion
-                    if @tiles.perimiterSegmentMaxLength(vacant, line) >= 3
-                        return false
-                    @tiles.set vacant, line
-                    found = true
-                else
-                    for neighbor in @tiles.rigidNeighborCorners tile
-                        # no other line is going into this corner
-                        if @tiles.perimiterSegmentMaxLength(neighbor, line) >= 3
-                            return false
-                        @tiles.set neighbor, line
-                        found = true
-        return true
-    guess: =>
-        [unfinished] = @tiles.segment_ends
-        if unfinished
-            line = @tiles.grid[unfinished]
-            ++@tiles.guess_depth
-            branches = 0
-            for neighbor in @tiles.neighbors unfinished, BLANK
-                continue if @tiles.perimiterSegmentMaxLength(neighbor, line) >= 3
-                hypothesis = @tiles.clone()
-                hypothesis.set neighbor, line
-                @tiles_stack.push hypothesis
-                ++branches
-            ++@guess_branches[branches]
-        # this tile is superceded by those just pushed
-        return false
-
-class ANSITermRender extends stream.Transform
-    constructor: (@refresh=50) ->
-        super objectMode:true
-        @puzzles = 0
-        @log = []
-        @screen_height = 24
-    _flush: ->
-        if @interval
-            clearInterval @interval
-            @interval = null
-        @push null
-    _transform: (data, encoding, autocb) ->
-        #return unless data
-        if typeof(data) is 'object'
-            ++@puzzles
-            @puzzle = data
-        else
-            @log.push [@puzzle.elapsed, @status()]
-            @log.sort (a, b) -> b[0] - a[0]
-        unless @puzzle.tiles or @puzzle.solutions[0]
-            return
-        @tile_colors = [
+        @display_initialized = false
+        @display_colors = [
             ansiterm.bg.black
             ansiterm.bg.reset
             ansiterm.bg.red
@@ -314,138 +225,141 @@ class ANSITermRender extends stream.Transform
             ansiterm.bg.white
             ansiterm.bg.grey
             ansiterm.bg.light_green
-            ansiterm.bg.black # PLACEHOLDER
+            ansiterm.bg.black # XXX PLACEHOLDER
         ]
-        @row = (1 + Math.floor tile / @puzzle.width for tile in [0..@puzzle.width * @puzzle.height])
-        @column = (1 + tile % @puzzle.width * COLUMN_WIDTH for tile in [0..@puzzle.width * @puzzle.height])
-        @initDisplay()
-        @border()
-        @render()
-        @interval or= setInterval @render, @refresh
-        return null
-    status: =>
-        tiles = @puzzle.tiles or @puzzle.solutions[0]
-        elapsed = @puzzle.elapsed or (new Date - @puzzle.start) or 0
-        if @puzzle.best_time > 0
-            progress = "#{Math.round elapsed / @puzzle.best_time * 100}%"
+    solve: (autocb) ->
+        # maximally extends segments, somewhat balanced, but also preferring
+        # recent or untested ends.
+        @start = new Date
+        #next_context_switch = @start + 500 / display_frequency
+        loop
+            tiles = @tiles
+            hopeful = true
+            mandatory_found = true
+            # accumulate guesses, ordered by forkiness
+            branches = [null, null, null]
+            while hopeful and mandatory_found
+                mandatory_found = false
+                segment_index = 0
+                while segment_index < tiles.segment_ends.length
+                    tile = tiles.segment_ends[segment_index]
+                    line = tiles.line_grid[tile]
+                    matches = @match.call tiles, tile
+                    console.log "tile #{tile} line #{line} si #{segment_index} hope #{hopeful} mf #{mandatory_found} matches #{JSON.stringify matches}" if debug
+                    switch matches?.length or 0
+                        when 0
+                            hopeful = false
+                        when 1
+                            for offset in matches[0]
+                                #console.log "    set #{tile} + #{offset}"
+                                tiles.set tile + offset, line
+                            @render() if debug
+                            branches = [null, null, null]
+                            mandatory_found = true
+                        else
+                            # save one (of each branchiness) for later
+                            branches[matches.length - 2] or= [tile, line, matches]
+                            segment_index++
+                    break unless hopeful
+                #console.log "mandatory restart"
+            @render() if debug
+            if hopeful and tiles.blanks > 0
+                [tile, line, matches] = branches[0] or branches[1] or branches[2] or []
+                hopeful = line?
+                if hopeful
+                    #console.log "    matches #{JSON.stringify matches}"
+                    for offsets, i in matches
+                        #console.log "    hypothesis #{i+1} of #{matches.length}: line #{line} tile #{tile} offsets #{JSON.stringify offsets}"
+                        continue if i is 0
+                        hypothesis = new Tiles tiles
+                        for offset in offsets
+                            #console.log "    set #{tile} + #{offset}"
+                            hypothesis.set tile + offset, line
+                        @stack.push hypothesis
+                    # reuse current tile state
+                    for offset in matches[0]
+                        tiles.set tile + offset, line
+            @render() if debug
+            if hopeful and tiles.blanks is 0
+                # solved!
+                @solutions.push new Tiles @tiles
+                hopeful = false
+            unless hopeful
+                #console.log "popping"
+                @tiles = @stack.pop()
+                break unless @tiles
+            if debug
+                await setTimeout defer(), 100
+            else unless ++@step % 10000
+                await setImmediate defer()
+        @elapsed = new Date - @start
+    render: (supplemental=[], screen_height=24) =>
+        write = (data) -> process.stdout.write data
+        unless @display_initialized or scroll
+            @display_initialized = true
+            write ansiterm.position()
+            write ansiterm.eraseDisplay()
+        write ansiterm.position() unless debug or scroll
+        tiles = @tiles or @solutions?[0] or @
+        for line, tile in tiles.line_grid
+            write ansiterm.color @display_colors[line + 1]
+            if tile in @endpoints
+                write " () "
+            else if tile in tiles.segment_ends
+                write " -- "
+            else
+                write ansiterm.color ansiterm.fg.white
+                write "    #{tile} "[-4..]
+            if tile % @width is @width - 1
+                write ansiterm.color()
+                write "\n"
+        write ansiterm.eraseDisplay()
+        elapsed = @elapsed or (new Date - @start or 0) or 0
+        if @best_time
+            progress = "#{Math.round elapsed / @best_time} * 100}%"
         else
             progress = ""
-        #return "puzzle #{@puzzles} step #{@puzzle.steps} stack #{@puzzle.tiles_stack.length} guess_depth #{tiles.guess_depth} solutions #{@puzzle.solutions.length} elapsed #{elapsed}ms #{progress}\n"
-        return "##{@puzzles} step #{@puzzle.steps} elapsed #{elapsed}ms #{progress} #{@puzzle.guess_branches}\n"
-    initDisplay: ->
-        @push ansiterm.position()
-        @push ansiterm.eraseDisplay()
-    render: =>
-        @raster()
-        @push ansiterm.color()
-        if @puzzle.steps?
-            @push ansiterm.position @puzzle.height + 1
-            @push ansiterm.eraseLine()
-            @push @status()
-            #@push JSON.stringify @puzzle.tiles
-        if @puzzle.message
-            @push ansiterm.position @puzzle.height + 2
-            @push ansiterm.eraseDisplay()
-            @push "#{@puzzle.message}\n"
-        else
-            @push ansiterm.position @puzzle.height + 2
-            @push ansiterm.eraseDisplay()
-            @push (status for [_, status] in @log)[..@screen_height - @puzzle.height - 3].join ''
-        @push ansiterm.position 24
-    border: ->
-        @push ansiterm.color ansiterm.bg.black
-        tiles = @puzzle.tiles or @puzzle.solutions[0]
-        for line, tile in tiles.grid
-            if line is WALL
-                @push ansiterm.position @row[tile], @column[tile]
-                @push " ".repeat COLUMN_WIDTH
-    raster: ->
-        current_row = null
-        next_column = null
-        left_pad = " ".repeat COLUMN_WIDTH
-        draw = (tile, line, glyph) =>
-            right_pad = " ".repeat Math.floor (COLUMN_WIDTH - glyph.length) / 2
-            glyph = (left_pad + glyph + right_pad)[-COLUMN_WIDTH..]
-            if @row[tile] isnt current_row or @column[tile] isnt next_column
-                @push ansiterm.position @row[tile], @column[tile]
-            @push ansiterm.color @tile_colors[line + 1]
-            @push ansiterm.color ansiterm.fg.white
-            @push glyph
-            next_column = @column[tile] + COLUMN_WIDTH
-            current_row = @row[tile]
-        tiles = @puzzle.tiles or @puzzle.solutions[0]
-        numeric_width = Math.ceil log10 @puzzle.height * @puzzle.width
-        for line, tile in tiles.grid
-            switch true
-                when tiles.isEndpoint tile
-                    draw tile, line, "()"
-                when tiles.isDeadEnd tile
-                    draw tile, line, "XX"
-                when tiles.isSegmentEnd tile
-                    draw tile, line, "--"
-                else
-                    if numeric_width < COLUMN_WIDTH
-                        glyph = tile.toString()
-                        glyph = "#{' '.repeat numeric_width - glyph.length}#{glyph} "
-                    else
-                        glyph = ""
-                    draw tile, line, glyph
+        write "puzzle #{@n} step #{@step} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
+        #write JSON.stringify tiles
+        #write "\n"
 
-# XXX parser driver
-parsePuzzle = (line) ->
+parseSolution = (line) ->
     [summary, traces...] = line.split ';'
     [size, _, n, trace_count] = summary.split ','
     size = parseInt size
-    addWalls = (packed_tile) ->
-        width = size + 2
-        packed_tile = parseInt packed_tile
-        return 1 + width + packed_tile + 2 * Math.floor(packed_tile / (width - 2))
-
-    traces = ((addWalls(packed_tile) for packed_tile in trace.split ',') for trace in traces)
-    endpoints = ([tiles[0], tiles[tiles.length-1]] for tiles in traces)
-    endpoints.unshift [undefined, undefined]
+    width = size + 2
+    endpoints = []
+    for trace in traces
+        trace = trace.split ','
+        start = parseInt trace[0]
+        end = parseInt trace[trace.length - 1]
+        endpoints.push 1 + width + start + 2 * Math.floor(start / size)
+        endpoints.push 1 + width + end + 2 * Math.floor(end / size)
     return new Puzzle size, endpoints
-
-render = new ANSITermRender
-render.pipe process.stdout
 
 try
     timings = JSON.parse fs.readFileSync 'flowfree_timings.json'
-catch
+catch e
     timings = {}
 
 await
-    puzzle_queue = []
+    lines = []
     rl = readline.createInterface input:process.stdin, terminal:false
     rl.on 'line', (line) ->
-        if line
-            puzzle = parsePuzzle line
-            puzzle.best_time = timings[puzzle.id]
-            puzzle_queue.push puzzle
-    rl.on 'close', ->
-        puzzle_queue.push null
-    do (autocb=defer()) ->
-        loop
-            p = puzzle_queue.shift()
-            switch p
-                when null
-                    return
-                when undefined
-                    rl.resume()
-                    await setTimeout defer(), 10
-                else
-                    rl.pause()
-                    render.write p
-                    await p.solve defer()
-                    timings[p.id] = Math.min p.elapsed, (timings[p.id] ? p.elapsed)
-                    render.write true
-                    if p.solutions.length is 0
-                        throw new Error 'no solution'
-                    #if p.solutions.length > 1
-                    #    throw new Error 'too many solutions'
-                    #process.stdout.write '\x07'
-                    await setTimeout defer(), 100
+        lines.push line
+    rl.on 'close', defer()
 
-render.end()
-
-fs.writeFileSync 'flowfree_timings.json', JSON.stringify timings
+for line in lines
+    await do (autocb=defer(done)) ->
+        puzzle = parseSolution line
+        puzzle.best_time = timings[puzzle.id]
+        if display_frequency
+            puzzle.render()
+            interval = setInterval puzzle.render, 1000 / display_frequency
+        await puzzle.solve defer()
+        clearInterval interval
+        puzzle.render()
+        return true if puzzle.solutions.length < 1
+        return true if debug and puzzle.solutions.length isnt 1
+        await setTimeout defer(), display_showoff
+    break if done
