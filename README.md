@@ -1,5 +1,5 @@
-flowfree solver
-===============
+Flow Free Solver
+================
 
 Solves [Flow](https://itunes.apple.com/us/app/flow-free/id526641427) [Free](https://play.google.com/store/apps/details?id=com.bigduckgames.flow) puzzles.
 
@@ -7,6 +7,8 @@ Solves [Flow](https://itunes.apple.com/us/app/flow-free/id526641427) [Free](http
 
 Getting the Puzzles
 -------------------
+
+Do so at your own risk.
 
 ### Apple Ecosystem
 
