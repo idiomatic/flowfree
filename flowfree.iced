@@ -338,12 +338,17 @@ class Puzzle
             for line, tile in tiles.line_grid
                 write ansiterm.color @display_colors[line + 1]
                 if tile in @endpoints
-                    write " () "
-                else if tile in tiles.segment_ends
-                    write " -- "
-                else
                     write ansiterm.color ansiterm.fg.white
-                    write "    #{tile} "[-4..]
+                    write if debug then " () " else "()"
+                else if tile in tiles.segment_ends
+                    write ansiterm.color ansiterm.fg.grey44
+                    write if debug then " -- " else "--"
+                else
+                    if debug
+                        write ansiterm.color ansiterm.fg.grey
+                        write "    #{tile} "[-4..]
+                    else
+                        write "  "
                 if tile % @width is @width - 1
                     write ansiterm.color()
                     write "\n"
