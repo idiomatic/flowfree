@@ -6,7 +6,7 @@ ansiterm = require './ansiterm'
 debug = false
 scroll = debug
 display_frequency = 20
-display_showoff = 1
+display_showoff = 50
 
 # TODO apply failure rules after segment join?
 # TODO list of patterns affected by this tile?
@@ -232,6 +232,7 @@ class Puzzle
         @tiles = new Tiles @
         @stack = []
         @step = 0
+        @guesses = 0
         @start = null
         @elapsed = null
         @solutions = []
@@ -307,15 +308,14 @@ class Puzzle
                 return false unless hypothesis
             else
                 @stack.push hypothesis if hypothesis
+            ++@guesses
         return true
     solve: (autocb) ->
         # assert @tiles
         @start = new Date
         while @tiles
-            ++@step
             for strategy in [@mandatory, @guess]
                 unless strategy()
-                    console.log "popping" if debug
                     @render() if debug
                     @tiles = @stack.pop()
                     break
@@ -324,7 +324,7 @@ class Puzzle
                     @render()
             if debug
                 await setTimeout defer(), 100
-            else unless @step % 100
+            else unless ++@step % 100
                 await setImmediate defer()
         @elapsed = new Date - @start
     render: (supplemental=[], screen_height=24) =>
@@ -363,7 +363,7 @@ class Puzzle
             progress = "#{Math.round elapsed / @best_time} * 100}%"
         else
             progress = ""
-        write "puzzle #{@n} step #{@step} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
+        write "puzzle #{@n} guesses #{@guesses} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
         #write JSON.stringify tiles
         #write "\n"
 
