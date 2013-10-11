@@ -246,6 +246,10 @@ class Puzzle
             ansiterm.bg.white
             ansiterm.bg.grey
             ansiterm.bg.light_green
+            ansiterm.bg.tan
+            ansiterm.bg.dark_blue
+            ansiterm.bg.slate
+            ansiterm.bg.hot_pink
             ansiterm.bg.black # XXX PLACEHOLDER
         ]
     mandatory: =>

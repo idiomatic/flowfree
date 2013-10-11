@@ -15,13 +15,16 @@ module.exports =
         black: 30
         red: 31
         white: 37
+        grey: '38;5;7'
+        light_grey: '38;5;15'
+        grey44: '38;5;238'
     bg:
         reset: 0
         black: 40
         red: '48;5;9'
         green: 42
         yellow: 43
-        blue: 44
+        blue: '48;5;12'
         magenta: '48;5;13'
         cyan: 46
         white: '48;5;15'
@@ -33,3 +36,7 @@ module.exports =
         dark_magenta: '48;5;5'
         grey: 47
         light_green: '48;5;10'
+        tan: '48;5;136'
+        dark_blue: '48;5;4'
+        slate: '48;5;74'
+        hot_pink: '48;5;212'
