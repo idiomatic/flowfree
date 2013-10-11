@@ -165,7 +165,12 @@ class Puzzle
             {vacant:[SW], midsegment:[SWW, SSW, S], fail:true}
             {vacant:[SW], midsegment:[SWW, SSW, W], fail:true}
             # loops
+            {me:[N, E], midsegment:[N, E], segmentend:[0], fail:true}
+            {me:[N, S], midsegment:[N, S], segmentend:[0], fail:true}
             {me:[N, W], midsegment:[N, W], segmentend:[0], fail:true}
+            {me:[E, S], midsegment:[E, S], segmentend:[0], fail:true}
+            {me:[E, W], midsegment:[E, W], segmentend:[0], fail:true}
+            {me:[S, W], midsegment:[S, W], segmentend:[0], fail:true}
         ])
         @mandatory_patterns = (compile pattern for pattern in [
             # involuntary exit
@@ -178,28 +183,28 @@ class Puzzle
             {vacant:[W], notvacant:[N, E, S]}
             {vacant:[W], notvacant:[N, E, S]}
             # only line capable of feeding this part of a dead-end
-            {vacant:[N, NN], midsegment:[NE, NW], notme:[NE, NW]}
-            {vacant:[E, EE], midsegment:[NE, SE], notme:[NE, SE]}
-            {vacant:[S, SS], midsegment:[SE, SW], notme:[SE, SW]}
-            {vacant:[W, WW], midsegment:[NW, SW], notme:[NW, SW]}
+            {vacant:[N], midsegment:[NE, NW]}
+            {vacant:[E], midsegment:[NE, SE]}
+            {vacant:[S], midsegment:[SE, SW]}
+            {vacant:[W], midsegment:[NW, SW]}
             # only line able to turn a nearby corner
-            {vacant:[N, NW], midsegment:[NE, NN], notme:[W, NE, NN]}
-            {vacant:[N, NE], midsegment:[NW, NN], notme:[E, NW, NN]}
-            {vacant:[E, NE], midsegment:[SE, EE], notme:[N, SE, EE]}
-            {vacant:[E, SE], midsegment:[NE, EE], notme:[S, NE, EE]}
-            {vacant:[S, SE], midsegment:[SW, SS], notme:[E, SW, SS]}
-            {vacant:[S, SW], midsegment:[SE, SS], notme:[W, SE, SS]}
-            {vacant:[W, SW], midsegment:[NW, WW], notme:[S, NW, WW]}
-            {vacant:[W, NW], midsegment:[SW, WW], notme:[N, SW, WW]}
+            {vacant:[N, NW], midsegment:[NE, NN], notme:[W]}
+            {vacant:[N, NE], midsegment:[NW, NN], notme:[E]}
+            {vacant:[E, NE], midsegment:[SE, EE], notme:[N]}
+            {vacant:[E, SE], midsegment:[NE, EE], notme:[S]}
+            {vacant:[S, SE], midsegment:[SW, SS], notme:[E]}
+            {vacant:[S, SW], midsegment:[SE, SS], notme:[W]}
+            {vacant:[W, SW], midsegment:[NW, WW], notme:[S]}
+            {vacant:[W, NW], midsegment:[SW, WW], notme:[N]}
             # only line able to turn a slightly further corner
-            {vacant:[N, NN, NNW], midsegment:[NE, NNE, NNN], notme:[NW, NE, NNE, NNN]}
-            {vacant:[N, NN, NNE], midsegment:[NW, NNW, NNN], notme:[NE, NW, NNW, NNN]}
-            {vacant:[E, EE, NEE], midsegment:[SE, SEE, EEE], notme:[NE, SE, SEE, EEE]}
-            {vacant:[E, EE, SEE], midsegment:[NE, NEE, EEE], notme:[SE, NE, NEE, EEE]}
-            {vacant:[S, SS, SSE], midsegment:[SW, SSW, SSS], notme:[SE, SW, SSW, SSS]}
-            {vacant:[S, SS, SSW], midsegment:[SE, SSE, SSS], notme:[SW, SE, SSE, SSS]}
-            {vacant:[W, WW, SWW], midsegment:[NW, NWW, WWW], notme:[SW, NW, NWW, WWW]}
-            {vacant:[W, WW, NWW], midsegment:[SW, SWW, WWW], notme:[NW, SW, SWW, WWW]}
+            {vacant:[N, NN, NNW], midsegment:[NE, NNE, NNN], notme:[NW]}
+            {vacant:[N, NN, NNE], midsegment:[NW, NNW, NNN], notme:[NE]}
+            {vacant:[E, EE, NEE], midsegment:[SE, SEE, EEE], notme:[NE]}
+            {vacant:[E, EE, SEE], midsegment:[NE, NEE, EEE], notme:[SE]}
+            {vacant:[S, SS, SSE], midsegment:[SW, SSW, SSS], notme:[SE]}
+            {vacant:[S, SS, SSW], midsegment:[SE, SSE, SSS], notme:[SW]}
+            {vacant:[W, WW, SWW], midsegment:[NW, NWW, WWW], notme:[SW]}
+            {vacant:[W, WW, NWW], midsegment:[SW, SWW, WWW], notme:[NW]}
             # bent
             {vacant:[N], midsegment:[W], me:[S, SE]}
             {vacant:[N], midsegment:[E], me:[S, SW]}
