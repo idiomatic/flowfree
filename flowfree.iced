@@ -10,6 +10,10 @@ display_showoff = 50
 
 # TODO apply failure rules after segment join?
 # TODO list of patterns affected by this tile?
+# TODO visualization of guesses
+
+String::repeat = (n) ->
+    new Array(n + 1).join @
 
 Array::removeFirst = (v) ->
     i = @indexOf v
@@ -21,6 +25,11 @@ BLANK = 0
 # RED = 1
 # ...
 
+timing = {mandatory: 0, guess: 0, failed: 0, set: 0, guessing: 0}
+counts = {set: 0, guessing: 0}
+totals_match = {mandatory: 0, guess: 0, failed: 0}
+totals_no_match = {mandatory: 0, guess: 0, failed: 0}
+
 class Tiles
     constructor: (parent) ->
         {@width, @height, @blanks, @match, @mandatory_decision_tree, @failure_decision_tree, @guess_decision_tree} = parent
@@ -31,6 +40,7 @@ class Tiles
         #assert line isnt WALL
         #assert @line_grid[tile] is BLANK
         #assert tile not in @segment_ends
+        start = process.hrtime()
         --@blanks
         @line_grid[tile] = line
         # collapse N segment end(s):
@@ -49,13 +59,28 @@ class Tiles
                         @segment_ends.splice i, 1
         if neighbor_segment_ends is 2
             @segment_ends.removeFirst tile
+        ++counts.set
+        timing.set += process.hrtime(start)[1]
     mandatory: (tile) ->
+        start = process.hrtime()
         go = @mandatory_decision_tree.call @, tile
+        if go
+            ++totals_match.mandatory
+        else
+            ++totals_no_match.mandatory
+        timing.mandatory += process.hrtime(start)[1]
         return go
     failed: (tile) ->
+        start = process.hrtime()
         failed = @failure_decision_tree.call @, tile
+        if failed
+            ++totals_match.failed
+        else
+            ++totals_no_match.failed
+        timing.failed += process.hrtime(start)[1]
         return failed
     guess: (tiles=@segment_ends) ->
+        start = process.hrtime()
         fallbacks = [null, null]
         match = undefined
         for tile in tiles
@@ -68,6 +93,11 @@ class Tiles
                 when 3, 4
                     fallbacks[options.length - 3] or= match
         match or= fallbacks[0] or fallbacks[1]
+        if match
+            ++totals_match.guess
+        else
+            ++totals_no_match.guess
+        timing.guess += process.hrtime(start)[1]
         return match
 
 puzzle_id = 0
@@ -347,10 +377,13 @@ class Puzzle
         return false unless tile?
         console.log "guess tile #{tile} go #{JSON.stringify ((tile + offset for offset in go) for go in options)}" if debug
         for option, i in options
+            start = process.hrtime()
             last_guess = i is options.length - 1
             line = @tiles.line_grid[tile]
             # clone or recycle current state
             hypothesis = if last_guess then @tiles else new Tiles @tiles
+            timing.guessing += process.hrtime(start)[1]
+            ++counts.guessing
             for offset in option
                 new_tile = tile + offset
                 hypothesis.set new_tile, line
@@ -425,6 +458,24 @@ class Puzzle
         else
             progress = ""
         write "puzzle #{@n} guesses #{@guesses} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
+        timing_total = 0
+        lpad = (width, str) ->
+            str = str.toString()
+            " ".repeat(width - str.length) + str
+        rpad = (width, str) ->
+            str = str.toString()
+            str + " ".repeat(width - str.length)
+        for k, t of timing
+            timing_total += t
+        for k, t of timing
+            if totals_match[k]
+                total = totals_match[k] + totals_no_match[k]
+                supplemental = "  #{lpad 3, Math.round 100 * totals_match[k] / total}% matched"
+            else
+                total = counts[k]
+                supplemental = ''
+            if total > 0
+                write "#{lpad 6, Math.round(t / total), 6}usec  #{rpad 9, k} #{lpad 3, Math.round 100 * t / timing_total}% time#{supplemental}\n"
 
 parseSolution = (line) ->
     [summary, traces...] = line.split ';'
