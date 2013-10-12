@@ -186,6 +186,8 @@ class Puzzle
                 return out.join ''
             return new Function 'tile', codegen root
         @failure_decision_tree = compile [
+            # no exit
+            {notvacant:[N, E, S, W], notmidsegment:[0], fail:true}
             # unacceptable clumping
             {me:[N, NE, E], fail:true}
             {me:[NE, E, SE], fail:true}
@@ -195,8 +197,13 @@ class Puzzle
             {me:[SW, W, NW], fail:true}
             {me:[W, NW, N], fail:true}
             {me:[NW, N, NE], fail:true}
-            # no exit
-            {notvacant:[N, E, S, W], segmentend:[0], fail:true}
+            # loops
+            {me:[N, E], midsegment:[N, E], notmidsegment:[0], fail:true}
+            {me:[N, S], midsegment:[N, S], notmidsegment:[0], fail:true}
+            {me:[N, W], midsegment:[N, W], notmidsegment:[0], fail:true}
+            {me:[E, S], midsegment:[E, S], notmidsegment:[0], fail:true}
+            {me:[E, W], midsegment:[E, W], notmidsegment:[0], fail:true}
+            {me:[S, W], midsegment:[S, W], notmidsegment:[0], fail:true}
             # vacant dead ends
             {vacant:[NW], midsegment:[NWW, NNW, N], fail:true}
             {vacant:[NW], midsegment:[NWW, NNW, W], fail:true}
@@ -206,13 +213,15 @@ class Puzzle
             {vacant:[SE], midsegment:[SEE, SSE, E], fail:true}
             {vacant:[SW], midsegment:[SWW, SSW, S], fail:true}
             {vacant:[SW], midsegment:[SWW, SSW, W], fail:true}
-            # loops
-            {me:[N, E], midsegment:[N, E], segmentend:[0], fail:true}
-            {me:[N, S], midsegment:[N, S], segmentend:[0], fail:true}
-            {me:[N, W], midsegment:[N, W], segmentend:[0], fail:true}
-            {me:[E, S], midsegment:[E, S], segmentend:[0], fail:true}
-            {me:[E, W], midsegment:[E, W], segmentend:[0], fail:true}
-            {me:[S, W], midsegment:[S, W], segmentend:[0], fail:true}
+            # corner dead ends
+            {me:[N], vacant:[E], midsegment:[EE, SE], fail:true}
+            {me:[N], vacant:[W], midsegment:[WW, SW], fail:true}
+            {me:[E], vacant:[N], midsegment:[NN, NW], fail:true}
+            {me:[E], vacant:[S], midsegment:[SS, SW], fail:true}
+            {me:[S], vacant:[E], midsegment:[EE, NE], fail:true}
+            {me:[S], vacant:[W], midsegment:[WW, NW], fail:true}
+            {me:[W], vacant:[N], midsegment:[NN, NE], fail:true}
+            {me:[W], vacant:[S], midsegment:[SS, SE], fail:true}
         ]
         if debug
             console.log '/* failure_decision_tree */'
@@ -220,36 +229,27 @@ class Puzzle
         @mandatory_decision_tree = compile [
             # involuntary exit
             {vacant:[N], notvacant:[E, S, W]}
-            {vacant:[N], notvacant:[E, S, W]}
-            {vacant:[E], notvacant:[S, W, N]}
             {vacant:[E], notvacant:[S, W, N]}
             {vacant:[S], notvacant:[N, E, W]}
-            {vacant:[S], notvacant:[N, E, W]}
             {vacant:[W], notvacant:[N, E, S]}
-            {vacant:[W], notvacant:[N, E, S]}
-            # only line capable of feeding this part of a dead-end
-            {vacant:[N], midsegment:[NE, NW]}
-            {vacant:[E], midsegment:[NE, SE]}
-            {vacant:[S], midsegment:[SE, SW]}
-            {vacant:[W], midsegment:[NW, SW]}
             # only line able to turn a nearby corner
-            {vacant:[N, NW], midsegment:[NE, NN], notme:[W]}
-            {vacant:[N, NE], midsegment:[NW, NN], notme:[E]}
-            {vacant:[E, NE], midsegment:[SE, EE], notme:[N]}
-            {vacant:[E, SE], midsegment:[NE, EE], notme:[S]}
-            {vacant:[S, SE], midsegment:[SW, SS], notme:[E]}
-            {vacant:[S, SW], midsegment:[SE, SS], notme:[W]}
-            {vacant:[W, SW], midsegment:[NW, WW], notme:[S]}
-            {vacant:[W, NW], midsegment:[SW, WW], notme:[N]}
+            {vacant:[N, NW], midsegment:[NE, NN]}
+            {vacant:[N, NE], midsegment:[NW, NN]}
+            {vacant:[E, NE], midsegment:[SE, EE]}
+            {vacant:[E, SE], midsegment:[NE, EE]}
+            {vacant:[S, SE], midsegment:[SW, SS]}
+            {vacant:[S, SW], midsegment:[SE, SS]}
+            {vacant:[W, SW], midsegment:[NW, WW]}
+            {vacant:[W, NW], midsegment:[SW, WW]}
             # only line able to turn a slightly further corner
-            {vacant:[N, NN, NNW], midsegment:[NE, NNE, NNN], notme:[NW]}
-            {vacant:[N, NN, NNE], midsegment:[NW, NNW, NNN], notme:[NE]}
-            {vacant:[E, EE, NEE], midsegment:[SE, SEE, EEE], notme:[NE]}
-            {vacant:[E, EE, SEE], midsegment:[NE, NEE, EEE], notme:[SE]}
-            {vacant:[S, SS, SSE], midsegment:[SW, SSW, SSS], notme:[SE]}
-            {vacant:[S, SS, SSW], midsegment:[SE, SSE, SSS], notme:[SW]}
-            {vacant:[W, WW, SWW], midsegment:[NW, NWW, WWW], notme:[SW]}
-            {vacant:[W, WW, NWW], midsegment:[SW, SWW, WWW], notme:[NW]}
+            {vacant:[N, NN, NNW], midsegment:[NE, NNE, NNN]}
+            {vacant:[N, NN, NNE], midsegment:[NW, NNW, NNN]}
+            {vacant:[E, EE, NEE], midsegment:[SE, SEE, EEE]}
+            {vacant:[E, EE, SEE], midsegment:[NE, NEE, EEE]}
+            {vacant:[S, SS, SSE], midsegment:[SW, SSW, SSS]}
+            {vacant:[S, SS, SSW], midsegment:[SE, SSE, SSS]}
+            {vacant:[W, WW, SWW], midsegment:[NW, NWW, WWW]}
+            {vacant:[W, WW, NWW], midsegment:[SW, SWW, WWW]}
             # bent
             {vacant:[N], midsegment:[W], me:[S, SE]}
             {vacant:[N], midsegment:[E], me:[S, SW]}
@@ -259,6 +259,11 @@ class Puzzle
             {vacant:[S], midsegment:[W], me:[N, NE]}
             {vacant:[W], midsegment:[N], me:[E, SE]}
             {vacant:[W], midsegment:[S], me:[E, NE]}
+            # only line capable of feeding this part of a dead-end
+            {vacant:[N], midsegment:[NE, NW]}
+            {vacant:[E], midsegment:[NE, SE]}
+            {vacant:[S], midsegment:[SE, SW]}
+            {vacant:[W], midsegment:[NW, SW]}
         ]
         if debug
             console.log '/* mandatory_decision_tree */'
@@ -304,7 +309,6 @@ class Puzzle
             ansiterm.bg.dark_blue
             ansiterm.bg.slate
             ansiterm.bg.hot_pink
-            ansiterm.bg.black # XXX PLACEHOLDER
         ]
     mandatory: =>
         loop
