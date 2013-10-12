@@ -23,7 +23,7 @@ BLANK = 0
 
 class Tiles
     constructor: (parent) ->
-        {@width, @height, @blanks, @match, @mandatory_patterns, @failure_patterns, @guess_patterns} = parent
+        {@width, @height, @blanks, @match, @mandatory_decision_tree, @failure_decision_tree, @guess_decision_tree} = parent
         @line_grid = parent.line_grid.slice 0
         @segment_ends = parent.segment_ends.slice 0
     set: (tile, line) ->
@@ -50,26 +50,25 @@ class Tiles
         if neighbor_segment_ends is 2
             @segment_ends.removeFirst tile
     mandatory: (tile) ->
-        for pattern in @mandatory_patterns
-            go = pattern.call @, tile
-            return go if go
+        go = @mandatory_decision_tree.call @, tile
+        return go
     failed: (tile) ->
-        for pattern in @failure_patterns
-            return true if pattern.call @, tile
-        return false
+        failed = @failure_decision_tree.call @, tile
+        return failed
     guess: (tiles=@segment_ends) ->
         fallbacks = [null, null]
+        match = undefined
         for tile in tiles
-            for pattern in @guess_patterns
-                options = pattern.call @, tile 
-                #console.log "guess tile #{tile} options #{JSON.stringify options}"
-                continue unless options
-                switch options.length
-                    when 2
-                        return [tile, options]
-                    when 3, 4
-                        fallbacks[options.length - 3] or= [tile, options]
-        return fallbacks[0] or fallbacks[1]
+            options = @guess_decision_tree.call @, tile
+            continue unless options
+            match = [tile, options]
+            switch options.length
+                when 2
+                    break
+                when 3, 4
+                    fallbacks[options.length - 3] or= match
+        match or= fallbacks[0] or fallbacks[1]
+        return match
 
 puzzle_id = 0
 
@@ -121,29 +120,72 @@ class Puzzle
         SSW = SS + W
         SWW = S + WW
         NWW = N + WW
-        compile = (pattern) ->
-            source = []
-            if pattern.me?.length > 0 or pattern.notme?.length > 0
-                source.push "var line = this.line_grid[tile];"
-            for offset in pattern.me or []
-                    source.push "if (this.line_grid[tile + #{offset}] !== line) return;"
-            for offset in pattern.notme or []
-                    source.push "if (this.line_grid[tile + #{offset}] === line) return;"
-            for offset in pattern.vacant or []
-                source.push "if (this.line_grid[tile + #{offset}] !== #{BLANK}) return;"
-            for offset in pattern.notvacant or []
-                source.push "if (this.line_grid[tile + #{offset}] === #{BLANK}) return;"
-            for offset in pattern.midsegment or []
-                source.push "if (this.line_grid[tile + #{offset}] === #{BLANK}) return;"
-                source.push "if (this.segment_ends.indexOf(tile + #{offset}) !== -1) return;"
-            for offset in pattern.segmentend or []
-                source.push "if (this.segment_ends.indexOf(tile + #{offset}) === -1) return;"
-            if pattern.fail
-                source.push "return [];"
-            else
-                source.push "return #{JSON.stringify pattern.go or pattern.vacant};"
-            return new Function 'tile', source.join ' '
-        @failure_patterns = (compile pattern for pattern in [
+        compile = (patterns) ->
+            conditions =
+                me: (offset) -> "this.line_grid[tile] === this.line_grid[tile + #{offset}]"
+                vacant: (offset) -> "this.line_grid[tile + #{offset}] === #{BLANK}"
+                midsegment: (offset) -> "(this.line_grid[tile + #{offset}] !== #{BLANK}) && (this.segment_ends.indexOf(tile + #{offset}) === -1)"
+            # decision tree
+            # {a1_v1: {attr:a1, value:v1, positive:{...}, negative:{...}}, ...}
+            root = {}
+            for pattern in patterns
+                # build index of each attr/value
+                # {a1_v1: [polarity1, attr1, value1], a2_v21: ..., a2_v22: ...}
+                indexed_pattern = {}
+                for attr, values of pattern
+                    continue if attr is 'go' or attr is 'fail'
+                    polarity = 'positive'
+                    if attr[..2] is 'not'
+                        attr = attr[3..]
+                        polarity = 'negative'
+                    for value in values
+                        attr_value = "#{attr}=#{value}"
+                        indexed_pattern[attr_value] = [polarity, attr, value]
+                # traverse existing branches
+                r = root
+                loop
+                    done = true
+                    for attr_value, [polarity] of indexed_pattern
+                        if r[attr_value]
+                            # attr_value is in both this fork and the pattern
+                            delete indexed_pattern[attr_value]
+                            r = r[attr_value][polarity]
+                            done = false
+                            break
+                    break if done
+                # grow new branches for remaining pattern conditions
+                loop
+                    done = true
+                    for attr_value, [polarity, attr, value] of indexed_pattern
+                        delete indexed_pattern[attr_value]
+                        r[attr_value] =
+                            condition: conditions[attr] value
+                            positive: {comment: "#{value} is #{attr}"}
+                            negative: {comment: "#{value} isnt #{attr}"}
+                        r = r[attr_value][polarity]
+                        done = false
+                        break
+                    break if done
+                r.retval = JSON.stringify pattern.fail or pattern.go or pattern.vacant
+                r.comment = JSON.stringify pattern if debug
+            codegen = (root, depth=1) ->
+                return unless root
+                pad = "  ".repeat depth
+                out = []
+                out.push "#{pad}/* #{root.comment} */\n" if root.comment
+                if root.retval
+                    out.push "#{pad}return #{root.retval};\n"
+                else
+                    for _, {condition, positive, negative} of root
+                        continue unless condition
+                        out.push "#{pad}if (#{condition}) {\n"
+                        out.push codegen positive, depth + 1
+                        out.push "#{pad}} else {\n"
+                        out.push codegen negative, depth + 1
+                        out.push "#{pad}}\n"
+                return out.join ''
+            return new Function 'tile', codegen root
+        @failure_decision_tree = compile [
             # unacceptable clumping
             {me:[N, NE, E], fail:true}
             {me:[NE, E, SE], fail:true}
@@ -171,8 +213,11 @@ class Puzzle
             {me:[E, S], midsegment:[E, S], segmentend:[0], fail:true}
             {me:[E, W], midsegment:[E, W], segmentend:[0], fail:true}
             {me:[S, W], midsegment:[S, W], segmentend:[0], fail:true}
-        ])
-        @mandatory_patterns = (compile pattern for pattern in [
+        ]
+        if debug
+            console.log '/* failure_decision_tree */'
+            console.log @failure_decision_tree.toString()
+        @mandatory_decision_tree = compile [
             # involuntary exit
             {vacant:[N], notvacant:[E, S, W]}
             {vacant:[N], notvacant:[E, S, W]}
@@ -214,8 +259,11 @@ class Puzzle
             {vacant:[S], midsegment:[W], me:[N, NE]}
             {vacant:[W], midsegment:[N], me:[E, SE]}
             {vacant:[W], midsegment:[S], me:[E, NE]}
-        ])
-        @guess_patterns = (compile pattern for pattern in [
+        ]
+        if debug
+            console.log '/* mandatory_decision_tree */'
+            console.log @mandatory_decision_tree.toString()
+        @guess_decision_tree = compile [
             # guesses
             {vacant:[N, E], notvacant:[S, W], go:[[N], [E]]}
             {vacant:[N, S], notvacant:[E, W], go:[[N], [S]]}
@@ -228,7 +276,7 @@ class Puzzle
             {vacant:[S, W, N], notvacant:[E], go:[[S], [W], [N]]}
             {vacant:[W, N, E], notvacant:[S], go:[[W], [N], [E]]}
             {vacant:[N, E, S, W], go:[[N], [E], [S], [W]]}
-        ])
+        ]
         @tiles = new Tiles @
         @stack = []
         @step = 0
