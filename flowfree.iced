@@ -282,6 +282,9 @@ class Puzzle
             {vacant:[W, N, E], notvacant:[S], go:[[W], [N], [E]]}
             {vacant:[N, E, S, W], go:[[N], [E], [S], [W]]}
         ]
+        if debug
+            console.log '/* guess_decision_tree */'
+            console.log @guess_decision_tree.toString()
         @tiles = new Tiles @
         @stack = []
         @step = 0
@@ -340,13 +343,12 @@ class Puzzle
         # assert @tiles
         console.log "guess segment_ends #{JSON.stringify @tiles.segment_ends}" if debug
         [tile, options] = @tiles.guess() or []
-        console.log "guess guessed #{tile} #{JSON.stringify options}" if debug
         # assert options.length > 1
         return false unless tile?
+        console.log "guess tile #{tile} go #{JSON.stringify ((tile + offset for offset in go) for go in options)}" if debug
         for option, i in options
             last_guess = i is options.length - 1
             line = @tiles.line_grid[tile]
-            console.log "guess tile #{tile} go #{JSON.stringify ((tile + offset for offset in go) for go in options)}" if debug
             # clone or recycle current state
             hypothesis = if last_guess then @tiles else new Tiles @tiles
             for offset in option
@@ -358,6 +360,8 @@ class Puzzle
                     break
             if last_guess
                 return false unless hypothesis
+                # assert hypothesis is @tiles
+                @render() if debug
             else
                 @stack.push hypothesis if hypothesis
             ++@guesses
@@ -421,8 +425,6 @@ class Puzzle
         else
             progress = ""
         write "puzzle #{@n} guesses #{@guesses} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
-        #write JSON.stringify tiles
-        #write "\n"
 
 parseSolution = (line) ->
     [summary, traces...] = line.split ';'
