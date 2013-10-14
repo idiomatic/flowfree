@@ -61,5 +61,6 @@ Tricks
 * Mandatory segment end extension prefers just-moved endpoint (does not
   increment the index)
 * Guesses recycle the existing Tiles to avoid one clone
-* Pattern results are tile offsets and are lazily added to optimize
+* Pattern results are tile offsets and are lazily used to optimize
   multiple guesses
+

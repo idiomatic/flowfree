@@ -7,7 +7,6 @@ scroll = debug
 display_frequency = 20
 display_showoff = 50
 
-# TODO apply failure rules after segment join?
 # TODO list of patterns affected by this tile?
 # TODO visualization of guesses
 
@@ -66,12 +65,14 @@ class Puzzle
         @segment_ends = []
         @blanks = 0
         @line_grid = new Array @width * @height
+        # initialize WALLs and BLANKs
         for tile in [0...@height * @width]
             @line_grid[tile] = BLANK
         for col in [0...@width]
             @line_grid[col] = @line_grid[col + (@height - 1) * @width] = WALL
         for row in [0...@height]
             @line_grid[row * @width] = @line_grid[(row + 1) * @width - 1] = WALL
+        # initialize endpoints unless they're already neighboring
         for endpoint, i in @endpoints
             line = 1 + Math.floor i / 2
             @line_grid[endpoint] = line
@@ -110,7 +111,7 @@ class Puzzle
                 me: (offset) -> "tiles.line_grid[tile] === tiles.line_grid[tile + #{offset}]"
                 vacant: (offset) -> "tiles.line_grid[tile + #{offset}] === #{BLANK}"
                 midsegment: (offset) -> "(tiles.line_grid[tile + #{offset}] !== #{BLANK}) && (tiles.segment_ends.indexOf(tile + #{offset}) === -1)"
-            # decision tree
+            # recursive decision tree
             # {a1_v1: {attr:a1, value:v1, positive:{...}, negative:{...}}, ...}
             root = {}
             for pattern in patterns
@@ -126,7 +127,7 @@ class Puzzle
                     for value in values
                         attr_value = "#{attr}=#{value}"
                         indexed_pattern[attr_value] = [polarity, attr, value]
-                # traverse existing branches
+                # traverse existing branches in common between tree and pattern
                 r = root
                 loop
                     done = true
@@ -338,6 +339,7 @@ class Puzzle
             m = [tile, options]
             switch options.length
                 when 2
+                    # we really like this guess; use it now
                     match = m
                 when 3, 4
                     fallbacks[options.length - 3] or= m
@@ -438,6 +440,7 @@ parseSolution = (line) ->
         endpoints.push 1 + width + end + 2 * Math.floor(end / size)
     return new Puzzle size, endpoints
 
+# readlines
 await
     lines = []
     rl = readline.createInterface input:process.stdin, terminal:false
