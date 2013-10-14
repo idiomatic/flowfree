@@ -24,14 +24,9 @@ BLANK = 0
 # RED = 1
 # ...
 
-timing = {mandatory: 0, guess: 0, failed: 0, set: 0, guessing: 0}
-counts = {set: 0, guessing: 0}
-totals_match = {mandatory: 0, guess: 0, failed: 0}
-totals_no_match = {mandatory: 0, guess: 0, failed: 0}
-
 class Tiles
     constructor: (parent) ->
-        {@width, @height, @blanks, @match, @mandatory_decision_tree, @failure_decision_tree, @guess_decision_tree} = parent
+        {@width, @height, @blanks} = parent
         @line_grid = parent.line_grid.slice 0
         @segment_ends = parent.segment_ends.slice 0
     set: (tile, line) ->
@@ -39,7 +34,6 @@ class Tiles
         #assert line isnt WALL
         #assert @line_grid[tile] is BLANK
         #assert tile not in @segment_ends
-        start = process.hrtime()
         --@blanks
         @line_grid[tile] = line
         # collapse N segment end(s):
@@ -56,48 +50,11 @@ class Tiles
                         @segment_ends[i] = tile
                     else
                         @segment_ends.splice i, 1
-        if neighbor_segment_ends is 2
-            @segment_ends.removeFirst tile
-        ++counts.set
-        timing.set += process.hrtime(start)[1]
-    mandatory: (tile) ->
-        start = process.hrtime()
-        go = @mandatory_decision_tree.call @, tile
-        if go
-            ++totals_match.mandatory
-        else
-            ++totals_no_match.mandatory
-        timing.mandatory += process.hrtime(start)[1]
-        return go
-    failed: (tile) ->
-        start = process.hrtime()
-        failed = @failure_decision_tree.call @, tile
-        if failed
-            ++totals_match.failed
-        else
-            ++totals_no_match.failed
-        timing.failed += process.hrtime(start)[1]
-        return failed
-    guess: (tiles=@segment_ends) ->
-        start = process.hrtime()
-        fallbacks = [null, null]
-        match = undefined
-        for tile in tiles
-            options = @guess_decision_tree.call @, tile
-            continue unless options
-            match = [tile, options]
-            switch options.length
-                when 2
-                    break
-                when 3, 4
-                    fallbacks[options.length - 3] or= match
-        match or= fallbacks[0] or fallbacks[1]
-        if match
-            ++totals_match.guess
-        else
-            ++totals_no_match.guess
-        timing.guess += process.hrtime(start)[1]
-        return match
+        switch neighbor_segment_ends
+            when 0
+                @segment_ends.push tile
+            when 2
+                @segment_ends.removeFirst tile
 
 puzzle_count = 0
 
@@ -150,9 +107,9 @@ class Puzzle
         NWW = N + WW
         compile = (patterns) ->
             conditions =
-                me: (offset) -> "this.line_grid[tile] === this.line_grid[tile + #{offset}]"
-                vacant: (offset) -> "this.line_grid[tile + #{offset}] === #{BLANK}"
-                midsegment: (offset) -> "(this.line_grid[tile + #{offset}] !== #{BLANK}) && (this.segment_ends.indexOf(tile + #{offset}) === -1)"
+                me: (offset) -> "tiles.line_grid[tile] === tiles.line_grid[tile + #{offset}]"
+                vacant: (offset) -> "tiles.line_grid[tile + #{offset}] === #{BLANK}"
+                midsegment: (offset) -> "(tiles.line_grid[tile + #{offset}] !== #{BLANK}) && (tiles.segment_ends.indexOf(tile + #{offset}) === -1)"
             # decision tree
             # {a1_v1: {attr:a1, value:v1, positive:{...}, negative:{...}}, ...}
             root = {}
@@ -212,7 +169,7 @@ class Puzzle
                         out.push codegen negative, depth + 1
                         out.push "#{pad}}\n"
                 return out.join ''
-            return new Function 'tile', codegen root
+            return new Function 'tiles', 'tile', codegen root
         @failure_decision_tree = compile [
             # no exit
             {notvacant:[N, E, S, W], notmidsegment:[0], fail:true}
@@ -341,69 +298,79 @@ class Puzzle
             ansiterm.bg.slate
             ansiterm.bg.hot_pink
         ]
+    setAndCheck: (tiles, tile, line) ->
+        tiles.set tile, line
+        failed = @failure_decision_tree tiles, tile
+        console.log "tile #{tile} failed" if debug and failed
+        return not failed
     mandatory: =>
+        success = true
         loop
             console.log "mandatory segment_ends #{JSON.stringify @tiles.segment_ends}" if debug
-            mandatory_found = false
+            progress = false
             #for tile in @tiles.segment_ends
             # ... except we modify segment_ends, and thus would skip end(s)
             # ... and fail to slightly prioritize recently moved ends
             i = 0
-            while i < @tiles.segment_ends.length
+            while success and i < @tiles.segment_ends.length
                 tile = @tiles.segment_ends[i]
-                go = @tiles.mandatory tile
+                go = @mandatory_decision_tree @tiles, tile
                 console.log "mandatory tile #{tile} go #{go and JSON.stringify (tile + offset for offset in go)}" if debug
                 if go
                     line = @tiles.line_grid[tile]
                     for offset in go
                         new_tile = tile + offset
-                        @tiles.set new_tile, line
-                        if @tiles.failed new_tile
-                            console.log "mandatory tile #{tile} go #{new_tile} failed" if debug
-                            return false
-                    mandatory_found = true
-                    @render() if debug
+                        success = @setAndCheck @tiles, new_tile, line
+                        console.log "mandatory tile #{tile} go #{new_tile} failed" if debug and not success
+                        break unless success
+                    progress = success
                 else
                     ++i
-            break unless mandatory_found
-        return true
+            break unless progress
+        return success
     guess: =>
-        # assert @tiles
-        console.log "guess segment_ends #{JSON.stringify @tiles.segment_ends}" if debug
-        [tile, options] = @tiles.guess() or []
-        # assert options.length > 1
-        return false unless tile?
-        console.log "guess tile #{tile} go #{JSON.stringify ((tile + offset for offset in go) for go in options)}" if debug
-        for option, i in options
-            start = process.hrtime()
-            last_guess = i is options.length - 1
-            line = @tiles.line_grid[tile]
-            # clone or recycle current state
-            hypothesis = if last_guess then @tiles else new Tiles @tiles
-            timing.guessing += process.hrtime(start)[1]
-            ++counts.guessing
-            for offset in option
-                new_tile = tile + offset
-                hypothesis.set new_tile, line
-                if hypothesis.failed new_tile
-                    console.log "guess tile #{tile} go #{new_tile} failed" if debug
-                    hypothesis = null
-                    break
-            if last_guess
-                return false unless hypothesis
-                # assert hypothesis is @tiles
-                @render() if debug
-            else
-                @stack.push hypothesis if hypothesis
-            ++@guesses
-        return true
+        success = true
+        fallbacks = [null, null]
+        match = undefined
+        for tile in @tiles.segment_ends
+            options = @guess_decision_tree @tiles, tile
+            continue unless options
+            m = [tile, options]
+            switch options.length
+                when 2
+                    match = m
+                when 3, 4
+                    fallbacks[options.length - 3] or= m
+        console.log "guess match #{JSON.stringify match}" if debug
+        match or= fallbacks[0] or fallbacks[1]
+        if match
+            [tile, options] = match
+            # assert options.length > 1
+            console.log "guess tile #{tile} go #{JSON.stringify ((tile + offset for offset in go) for go in options)}" if debug
+            for option, i in options
+                last_guess = i is options.length - 1
+                line = @tiles.line_grid[tile]
+                # clone or recycle current state
+                hypothesis = if last_guess then @tiles else new Tiles @tiles
+                for offset in option
+                    new_tile = tile + offset
+                    success = @setAndCheck hypothesis, new_tile, line
+                    console.log "guess tile #{tile} go #{new_tile} failed" if debug and not success
+                    break unless success
+                if success
+                    ++@guesses
+                    unless last_guess
+                        @stack.push hypothesis
+        else
+            success = false
+        return success
     solve: (autocb) ->
         # assert @tiles
         @start = new Date
         while @tiles
             for strategy in [@mandatory, @guess]
+                @render() if debug
                 unless strategy()
-                    @render() if debug
                     @tiles = @stack.pop()
                     break
                 if @tiles.segment_ends.length is 0 and @tiles.blanks is 0
@@ -456,24 +423,6 @@ class Puzzle
         else
             progress = ""
         write "puzzle #{@n} guesses #{@guesses} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
-        timing_total = 0
-        lpad = (width, str) ->
-            str = str.toString()
-            " ".repeat(width - str.length) + str
-        rpad = (width, str) ->
-            str = str.toString()
-            str + " ".repeat(width - str.length)
-        for k, t of timing
-            timing_total += t
-        for k, t of timing
-            if totals_match[k]
-                total = totals_match[k] + totals_no_match[k]
-                supplemental = "  #{lpad 3, Math.round 100 * totals_match[k] / total}% matched"
-            else
-                total = counts[k]
-                supplemental = ''
-            if total > 0
-                write "#{lpad 6, Math.round(t / total), 6}usec  #{rpad 9, k} #{lpad 3, Math.round 100 * t / timing_total}% time#{supplemental}\n"
 
 parseSolution = (line) ->
     [summary, traces...] = line.split ';'
