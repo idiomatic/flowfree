@@ -425,11 +425,7 @@ class Puzzle
                 renderGrid @
         write ansiterm.eraseDisplay()
         elapsed = @elapsed or (new Date - (@start or new Date))
-        if @best_time
-            progress = "#{Math.round elapsed / @best_time} * 100}%"
-        else
-            progress = ""
-        write "puzzle #{@n} guesses #{@guesses} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms #{progress}\n"
+        write "puzzle #{@n} guesses #{@guesses} stack #{@stack.length} solutions #{@solutions.length} elapsed #{elapsed}ms\n"
 
 parseSolution = (line) ->
     [summary, traces...] = line.split ';'
