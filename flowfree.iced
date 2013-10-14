@@ -331,7 +331,7 @@ class Puzzle
         return success
     guess: =>
         success = true
-        fallbacks = [null, null]
+        last_resort_match = undefined
         match = undefined
         for tile in @tiles.segment_ends
             options = @guess_decision_tree @tiles, tile
@@ -341,10 +341,15 @@ class Puzzle
                 when 2
                     # we really like this guess; use it now
                     match = m
-                when 3, 4
-                    fallbacks[options.length - 3] or= m
+                    break
+                when 3
+                    # we sorta like this guess; use it unless better is found
+                    match = m
+                when 4
+                    # we don't like this guess
+                    last_resort_match = m
         console.log "guess match #{JSON.stringify match}" if debug
-        match or= fallbacks[0] or fallbacks[1]
+        match or= last_resort_match
         if match
             [tile, options] = match
             # assert options.length > 1
