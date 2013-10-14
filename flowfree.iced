@@ -1,5 +1,4 @@
 #!/usr/bin/env iced
-fs = require 'fs'
 readline = require 'readline'
 ansiterm = require './ansiterm'
 
@@ -100,13 +99,12 @@ class Tiles
         timing.guess += process.hrtime(start)[1]
         return match
 
-puzzle_id = 0
+puzzle_count = 0
 
 class Puzzle
     constructor: (@size, @endpoints) ->
         #[red1, red2, green1, green2, ...]
-        @n = ++puzzle_id
-        @id = "#{@size}x#{@size} #{@endpoints}"
+        @n = ++puzzle_count
         @width = @height = @size + 2
         @segment_ends = []
         @blanks = 0
@@ -491,11 +489,6 @@ parseSolution = (line) ->
         endpoints.push 1 + width + end + 2 * Math.floor(end / size)
     return new Puzzle size, endpoints
 
-try
-    timings = JSON.parse fs.readFileSync 'flowfree_timings.json'
-catch e
-    timings = {}
-
 await
     lines = []
     rl = readline.createInterface input:process.stdin, terminal:false
@@ -506,7 +499,6 @@ await
 for line in lines
     await do (autocb=defer(done)) ->
         puzzle = parseSolution line
-        puzzle.best_time = timings[puzzle.id]
         if display_frequency
             puzzle.render()
             interval = setInterval puzzle.render, 1000 / display_frequency
@@ -517,5 +509,3 @@ for line in lines
         return true if debug and puzzle.solutions.length isnt 1
         await setTimeout defer(), display_showoff
     break if done
-
-#fs.writeFileSync 'flowfree_timings.json', JSON.stringify timings
