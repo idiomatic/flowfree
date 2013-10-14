@@ -156,19 +156,19 @@ class Puzzle
                 r.comment = JSON.stringify pattern if debug
             codegen = (root, depth=1) ->
                 return unless root
-                pad = "  ".repeat depth
+                indent = "  ".repeat depth
                 out = []
-                out.push "#{pad}/* #{root.comment} */\n" if root.comment
+                out.push "#{indent}/* #{root.comment} */\n" if root.comment
                 if root.retval
-                    out.push "#{pad}return #{root.retval};\n"
+                    out.push "#{indent}return #{root.retval};\n"
                 else
                     for _, {condition, positive, negative} of root
                         continue unless condition
-                        out.push "#{pad}if (#{condition}) {\n"
+                        out.push "#{indent}if (#{condition}) {\n"
                         out.push codegen positive, depth + 1
-                        out.push "#{pad}} else {\n"
+                        out.push "#{indent}} else {\n"
                         out.push codegen negative, depth + 1
-                        out.push "#{pad}}\n"
+                        out.push "#{indent}}\n"
                 return out.join ''
             return new Function 'tiles', 'tile', codegen root
         @failure_decision_tree = compile [
