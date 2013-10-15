@@ -28,6 +28,7 @@ class Tiles
         {@width, @height, @blanks} = parent
         @line_grid = parent.line_grid.slice 0
         @segment_ends = parent.segment_ends.slice 0
+        @guess_grid = parent.guess_grid.slice 0
     set: (tile, line) ->
         #assert line isnt BLANK
         #assert line isnt WALL
@@ -65,6 +66,7 @@ class Puzzle
         @segment_ends = []
         @blanks = 0
         @line_grid = new Array @width * @height
+        @guess_grid = new Array @width * @height
         # initialize WALLs and BLANKs
         for tile in [0...@height * @width]
             @line_grid[tile] = BLANK
@@ -363,6 +365,7 @@ class Puzzle
                 hypothesis = if last_guess then @tiles else new Tiles @tiles
                 for offset in option
                     new_tile = tile + offset
+                    hypothesis.guess_grid[new_tile] = true
                     success = @setAndCheck hypothesis, new_tile, line
                     console.log "guess tile #{tile} go #{new_tile} failed" if debug and not success
                     break unless success
@@ -397,21 +400,31 @@ class Puzzle
             write ansiterm.position()
             write ansiterm.eraseDisplay()
         write ansiterm.position() unless debug or scroll
+        renderTile = (tiles, tile) =>
+            switch true
+                when tile in @endpoints
+                    return [ansiterm.fg.white, "()"]
+                when tile in tiles.segment_ends
+                    return [ansiterm.fg.grey44, "--"]
+                when tiles.guess_grid[tile]
+                    return [ansiterm.fg.grey44, "::"]
+                else
+                    return [null, "  "]
+        if debug
+            basicRenderTile = renderTile
+            renderTile = (tiles, tile) =>
+                [color, text] = basicRenderTile tiles, tile
+                switch true
+                    when text is "  "
+                        return [ansiterm.fg.grey, "    #{tile} "[-4..]]
+                    else
+                        return [color, " #{text} "]
         renderGrid = (tiles) =>
             for line, tile in tiles.line_grid
                 write ansiterm.color @display_colors[line + 1]
-                if tile in @endpoints
-                    write ansiterm.color ansiterm.fg.white
-                    write if debug then " () " else "()"
-                else if tile in tiles.segment_ends
-                    write ansiterm.color ansiterm.fg.grey44
-                    write if debug then " -- " else "--"
-                else
-                    if debug
-                        write ansiterm.color ansiterm.fg.grey
-                        write "    #{tile} "[-4..]
-                    else
-                        write "  "
+                [color, text] = renderTile tiles, tile
+                write ansiterm.color color if color
+                write text
                 if tile % @width is @width - 1
                     write ansiterm.color()
                     write "\n"
