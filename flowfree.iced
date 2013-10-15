@@ -3,9 +3,10 @@ readline = require 'readline'
 ansiterm = require './ansiterm'
 
 debug = false
+slow = if debug then 100
 scroll = debug
-display_frequency = 20
 display_showoff = 50
+display_frequency = not debug and 20
 
 # TODO list of patterns affected by this tile?
 # TODO visualization of guesses
@@ -381,15 +382,17 @@ class Puzzle
         @start = new Date
         while @tiles
             for strategy in [@mandatory, @guess]
-                @render() if debug
                 unless strategy()
                     @tiles = @stack.pop()
                     break
                 if @tiles.segment_ends.length is 0 and @tiles.blanks is 0
                     @solutions.push new Tiles @tiles
                     @render()
-            if debug
-                await setTimeout defer(), 100
+                else if debug
+                    @render()
+                #@tiles.just_changed = []
+            if slow
+                await setTimeout defer(), slow
             else unless ++@step % 100
                 await setImmediate defer()
         @elapsed = new Date - @start
