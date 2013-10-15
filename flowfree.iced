@@ -181,8 +181,8 @@ class Puzzle
             {me:[SE, S, SW], fail:true}
             {me:[S, SW, W], fail:true}
             {me:[SW, W, NW], fail:true}
-            {me:[W, NW, N], fail:true}
-            {me:[NW, N, NE], fail:true}
+            {me:[N, W, NW], fail:true}
+            {me:[N, NE, NW], fail:true}
             # loops
             {me:[N, E], midsegment:[N, E], notmidsegment:[0], fail:true}
             {me:[N, S], midsegment:[N, S], notmidsegment:[0], fail:true}
@@ -191,14 +191,18 @@ class Puzzle
             {me:[E, W], midsegment:[E, W], notmidsegment:[0], fail:true}
             {me:[S, W], midsegment:[S, W], notmidsegment:[0], fail:true}
             # vacant dead ends
-            {vacant:[NW], midsegment:[NWW, NNW, N], fail:true}
-            {vacant:[NW], midsegment:[NWW, NNW, W], fail:true}
-            {vacant:[NE], midsegment:[NEE, NNE, N], fail:true}
-            {vacant:[NE], midsegment:[NEE, NNE, E], fail:true}
-            {vacant:[SE], midsegment:[SEE, SSE, S], fail:true}
-            {vacant:[SE], midsegment:[SEE, SSE, E], fail:true}
-            {vacant:[SW], midsegment:[SWW, SSW, S], fail:true}
-            {vacant:[SW], midsegment:[SWW, SSW, W], fail:true}
+            {vacant:[N], midsegment:[NE, NW, 0], fail:true}
+            {vacant:[E], midsegment:[NE, SE, 0], fail:true}
+            {vacant:[S], midsegment:[SE, SW, 0], fail:true}
+            {vacant:[W], midsegment:[NW, SW, 0], fail:true}
+            {vacant:[NE], midsegment:[N, NEE, NNE], fail:true}
+            {vacant:[NE], midsegment:[E, NEE, NNE], fail:true}
+            {vacant:[SE], midsegment:[S, SEE, SSE], fail:true}
+            {vacant:[SE], midsegment:[E, SEE, SSE], fail:true}
+            {vacant:[SW], midsegment:[S, SWW, SSW], fail:true}
+            {vacant:[SW], midsegment:[W, SWW, SSW], fail:true}
+            {vacant:[NW], midsegment:[N, NWW, NNW], fail:true}
+            {vacant:[NW], midsegment:[W, NWW, NNW], fail:true}
             # corner dead ends
             {me:[N], vacant:[E], midsegment:[EE, SE], fail:true}
             {me:[N], vacant:[W], midsegment:[WW, SW], fail:true}
@@ -215,7 +219,7 @@ class Puzzle
         @mandatory_decision_tree = compile [
             # involuntary exit
             {vacant:[N], notvacant:[E, S, W]}
-            {vacant:[E], notvacant:[S, W, N]}
+            {vacant:[E], notvacant:[N, S, W]}
             {vacant:[S], notvacant:[N, E, W]}
             {vacant:[W], notvacant:[N, E, S]}
             # only line able to turn a nearby corner
@@ -258,14 +262,14 @@ class Puzzle
             # guesses
             {vacant:[N, E], notvacant:[S, W], go:[[N], [E]]}
             {vacant:[N, S], notvacant:[E, W], go:[[N], [S]]}
-            {vacant:[N, W], notvacant:[S, E], go:[[N], [W]]}
+            {vacant:[N, W], notvacant:[E, S], go:[[N], [W]]}
             {vacant:[S, E], notvacant:[N, W], go:[[S], [E]]}
             {vacant:[S, W], notvacant:[N, E], go:[[S], [W]]}
             {vacant:[E, W], notvacant:[N, S], go:[[E], [W]]}
             {vacant:[N, E, S], notvacant:[W], go:[[N], [E], [S]]}
             {vacant:[E, S, W], notvacant:[N], go:[[E], [S], [W]]}
-            {vacant:[S, W, N], notvacant:[E], go:[[S], [W], [N]]}
-            {vacant:[W, N, E], notvacant:[S], go:[[W], [N], [E]]}
+            {vacant:[N, S, W], notvacant:[E], go:[[N], [S], [W]]}
+            {vacant:[N, E, W], notvacant:[S], go:[[N], [E], [W]]}
             {vacant:[N, E, S, W], go:[[N], [E], [S], [W]]}
         ]
         if debug
