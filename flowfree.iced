@@ -306,7 +306,6 @@ class Puzzle
     setAndCheck: (tiles, tile, line) ->
         tiles.set tile, line
         failed = @failure_decision_tree tiles, tile
-        console.log "tile #{tile} failed" if debug and failed
         return not failed
     mandatory: =>
         success = true
@@ -320,8 +319,8 @@ class Puzzle
             while success and i < @tiles.segment_ends.length
                 tile = @tiles.segment_ends[i]
                 go = @mandatory_decision_tree @tiles, tile
-                console.log "mandatory tile #{tile} go #{go and JSON.stringify (tile + offset for offset in go)}" if debug
                 if go
+                    console.log "mandatory tile #{tile} go #{JSON.stringify (tile + offset for offset in go)}" if debug
                     line = @tiles.line_grid[tile]
                     for offset in go
                         new_tile = tile + offset
@@ -352,7 +351,6 @@ class Puzzle
                 when 4
                     # we don't like this guess
                     last_resort_match = m
-        console.log "guess match #{JSON.stringify match}" if debug
         match or= last_resort_match
         if match
             [tile, options] = match
